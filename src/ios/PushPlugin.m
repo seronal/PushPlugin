@@ -169,13 +169,13 @@
 
         [self parseDictionary:notificationMessage intoJSON:jsonStr];
 
-        if (isInline)
-        {
+        if (isInline) {
             [jsonStr appendFormat:@"foreground:\"%d\"", 1];
             isInline = NO;
         }
-		else
+		else {
             [jsonStr appendFormat:@"foreground:\"%d\"", 0];
+        }
         
         [jsonStr appendString:@"}"];
 
@@ -183,6 +183,10 @@
 
         NSString * jsCallBack = [NSString stringWithFormat:@"%@(%@);", self.callback, jsonStr];
         [self.webView stringByEvaluatingJavaScriptFromString:jsCallBack];
+
+        // get javascript function to fire in background mode
+        CDVPluginResult *commandResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonStr];
+        [self.commandDelegate sendPluginResult:commandResult callbackId:self.callbackId];
         
         self.notificationMessage = nil;
     }
