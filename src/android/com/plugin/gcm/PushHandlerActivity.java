@@ -25,7 +25,7 @@ public class PushHandlerActivity extends Activity
 		Log.v(TAG, "onCreate");
 
 		boolean isPushPluginActive = PushPlugin.isActive();
-		processPushBundle(isPushPluginActive);
+		//processPushBundle(isPushPluginActive);
 
 		finish();
 
