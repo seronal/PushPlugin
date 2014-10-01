@@ -116,59 +116,35 @@
 }
 
 - (void)notificationReceived {
-    NSLog(@"Notification received");
-    
+    NSLog(@"Push Plugin: Notification received");
     if (notificationMessage && self.callback)
     {
-        NSMutableString *jsonStr = [NSMutableString stringWithString:@"{"];
-        
-        [self parseDictionary:notificationMessage intoJSON:jsonStr];
-        
-        if (isInline)
-        {
-            [jsonStr appendFormat:@"foreground:\"%d\"", 1];
+        NSMutableDictionary *editableNotification = [notificationMessage mutableCopy];
+        NSError *error;
+
+        if (isInline) {
+            [editableNotification setObject:@1 forKey:@"foreground"];
             isInline = NO;
         }
-        else
-            [jsonStr appendFormat:@"foreground:\"%d\"", 0];
-        
-        [jsonStr appendString:@"}"];
-        
-        NSLog(@"Msg: %@", jsonStr);
-        
-        NSString * jsCallBack = [NSString stringWithFormat:@"%@(%@);", self.callback, jsonStr];
-        [self.webView stringByEvaluatingJavaScriptFromString:jsCallBack];
-        
-        //get javascript function to fire in background mode
-        CDVPluginResult *commandResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:jsonStr];
-        [self.commandDelegate sendPluginResult:commandResult callbackId:self.callbackId];
-        
-        self.notificationMessage = nil;
-    }
-}
-
-// reentrant method to drill down and surface all sub-dictionaries' key/value pairs into the top level json
--(void)parseDictionary:(NSDictionary *)inDictionary intoJSON:(NSMutableString *)jsonString
-{
-    NSArray         *keys = [inDictionary allKeys];
-    NSString        *key;
-    
-    for (key in keys)
-    {
-        id thisObject = [inDictionary objectForKey:key];
-    
-        if ([thisObject isKindOfClass:[NSDictionary class]])
-            [self parseDictionary:thisObject intoJSON:jsonString];
-        else if ([thisObject isKindOfClass:[NSString class]])
-             [jsonString appendFormat:@"\"%@\":\"%@\",",
-              key,
-              [[[[inDictionary objectForKey:key]
-                stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"]
-                 stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""]
-                 stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"]];
         else {
-            [jsonString appendFormat:@"\"%@\":\"%@\",", key, [inDictionary objectForKey:key]];
+            [editableNotification setObject:@0 forKey:@"foreground"];
         }
+
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:editableNotification
+                                                           options:0
+                                                             error:&error];
+        if (! jsonData) {
+            NSLog(@"PushPlugin_ERROR: %@", error);
+        } else {
+            NSString *jsonStr = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+
+            NSLog(@"PushPlugin_JSON: %@",jsonStr);
+
+            NSString * jsCallBack = [NSString stringWithFormat:@"%@(%@);", self.callback, jsonStr];
+            [self.webView stringByEvaluatingJavaScriptFromString:jsCallBack];
+        }
+
+        self.notificationMessage = nil;
     }
 }
 
