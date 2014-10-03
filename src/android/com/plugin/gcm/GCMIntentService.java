@@ -1,5 +1,9 @@
 package com.plugin.gcm;
 
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -71,69 +75,58 @@ public class GCMIntentService extends GCMBaseIntentService {
 				extras.putBoolean("foreground", false);
 
                 // Send a notification if there is a message
-                if (extras.getString("message") != null && extras.getString("message").length() != 0) {
-                    createNotification(context, extras);
+                String message = extras.getString("message");
+                try {
+                    JSONObject data = new JSONObject(message);
+                    if(data.has("aps")) {
+                        JSONObject aps = data.getJSONObject("aps");
+                        createNotification(context, aps);
+                    }
+                } catch (JSONException e) {
+                    Log.d(TAG, "Could not process push notification due to JSON parsing error: message");
                 }
             }
             PushPlugin.sendExtras(extras);
         }
 	}
 
-	public void createNotification(Context context, Bundle extras)
-	{
-		NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-		String appName = getAppName(this);
+    public void createNotification(Context context, JSONObject aps)
+    {
+        NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        String appName = getAppName(this);
 
-		Intent notificationIntent = new Intent(this, PushHandlerActivity.class);
-		notificationIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-		notificationIntent.putExtra("pushBundle", extras);
+        Intent notificationIntent = new Intent(this, PushHandlerActivity.class);
+        notificationIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        
+        int defaults = Notification.DEFAULT_ALL;
+        
+        NotificationCompat.Builder mBuilder =
+            new NotificationCompat.Builder(context)
+                .setDefaults(defaults)
+                .setSmallIcon(context.getApplicationInfo().icon)
+                .setWhen(System.currentTimeMillis())
+                .setContentIntent(contentIntent)
+                .setAutoCancel(true);
 
-		PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-		
-		int defaults = Notification.DEFAULT_ALL;
+        try {
+            if (aps.has("alert")){
+                mBuilder.setContentText(aps.getString("alert"));
+                mBuilder.setTicker(aps.getString("alert"));
+                mBuilder.setContentTitle("Remotium");
+            }
+            if (aps.has("badge")){
+                mBuilder.setNumber(aps.getInt("badge"));
+            }
+            
+            int notId = 0;      
+            mNotificationManager.notify((String) appName, notId, mBuilder.build());
+        } catch (JSONException e) {
+            e.printStackTrace();
+            Log.d(TAG, "Could not process push notification due to JSON parsing error: aps");
+        }
 
-		if (extras.getString("defaults") != null) {
-			try {
-				defaults = Integer.parseInt(extras.getString("defaults"));
-			} catch (NumberFormatException e) {}
-		}
-		
-		NotificationCompat.Builder mBuilder =
-			new NotificationCompat.Builder(context)
-				.setDefaults(defaults)
-				.setSmallIcon(context.getApplicationInfo().icon)
-				.setWhen(System.currentTimeMillis())
-				.setContentTitle(extras.getString("title"))
-				.setTicker(extras.getString("title"))
-				.setContentIntent(contentIntent)
-				.setAutoCancel(true);
-
-		String message = extras.getString("message");
-		if (message != null) {
-			mBuilder.setContentText(message);
-		} else {
-			mBuilder.setContentText("<missing message content>");
-		}
-
-		String msgcnt = extras.getString("msgcnt");
-		if (msgcnt != null) {
-			mBuilder.setNumber(Integer.parseInt(msgcnt));
-		}
-		
-		int notId = 0;
-		
-		try {
-			notId = Integer.parseInt(extras.getString("notId"));
-		}
-		catch(NumberFormatException e) {
-			Log.e(TAG, "Number format exception - Error parsing Notification ID: " + e.getMessage());
-		}
-		catch(Exception e) {
-			Log.e(TAG, "Number format exception - Error parsing Notification ID" + e.getMessage());
-		}
-		
-		mNotificationManager.notify((String) appName, notId, mBuilder.build());
-	}
+    }
 	
 	private static String getAppName(Context context)
 	{
