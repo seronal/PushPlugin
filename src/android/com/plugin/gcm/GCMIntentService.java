@@ -67,36 +67,54 @@ public class GCMIntentService extends GCMBaseIntentService {
 		Bundle extras = intent.getExtras();
 		if (extras != null)
 		{
-			// if we are in the foreground, just surface the payload, else post it to the statusbar
-            if (PushPlugin.isInForeground()) {
-				extras.putBoolean("foreground", true);
-			}
-			else {
-				extras.putBoolean("foreground", false);
-
                 // Send a notification if there is a message
                 String message = extras.getString("message");
+                Bundle immediateExtras = new Bundle(extras);
+                Bundle delayedExtras = new Bundle(extras);
                 try {
-                    JSONObject data = new JSONObject(message);
-                    if(data.has("aps")) {
-                        JSONObject aps = data.getJSONObject("aps");
-                        createNotification(context, aps);
-                    }
+        			// if there is an onclick action, don't send it until user clicks on the notification
+                	// remove onclick from immediate data, add it to notification.
+                	JSONObject immediateData = new JSONObject(message);
+                	JSONObject delayedData = new JSONObject(message);
+                	immediateData.remove("onclick");
+                	immediateExtras.putString("message", immediateData.toString(0));
+                    if (PushPlugin.isInForeground()) {
+                    	immediateExtras.putBoolean("foreground", true);
+        			}
+        			else {
+        				immediateExtras.putBoolean("foreground", false);
+        				delayedExtras.putBoolean("foreground", false);
+	                    if(delayedData.has("aps")) {
+	                        JSONObject aps = delayedData.getJSONObject("aps");
+	                        if(delayedData.has("onclick")) {
+	                        	delayedData.remove("aps");
+	                        	delayedData.remove("actions");
+	                        	delayedExtras.putString("message", delayedData.toString(0));
+	                        	createNotification(context, aps, delayedExtras);
+	                        } else {
+	                        	createNotification(context, aps, null);
+	                        }
+	                    }
+        			}
                 } catch (JSONException e) {
-                    Log.d(TAG, "Could not process push notification due to JSON parsing error: message");
+                    Log.d(TAG, "Could not process push notification due to JSON parsing error: " + e.toString());
                 }
-            }
-            PushPlugin.sendExtras(extras);
-        }
+
+                PushPlugin.sendExtras(immediateExtras);
+		}
 	}
 
-    public void createNotification(Context context, JSONObject aps)
+    public void createNotification(Context context, JSONObject aps, Bundle extras)
     {
         NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         String appName = getAppName(this);
 
         Intent notificationIntent = new Intent(this, PushHandlerActivity.class);
         notificationIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        if(extras != null) {
+            notificationIntent.putExtra("pushBundle", extras);
+        }
+
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT);
         
         int defaults = Notification.DEFAULT_ALL;
@@ -118,8 +136,12 @@ public class GCMIntentService extends GCMBaseIntentService {
             if (aps.has("badge")){
                 mBuilder.setNumber(aps.getInt("badge"));
             }
-            
-            int notId = 0;      
+
+            int notId = 0;
+            if (aps.has("category")){
+                notId = aps.getString("category").hashCode();
+            }
+
             mNotificationManager.notify((String) appName, notId, mBuilder.build());
         } catch (JSONException e) {
             e.printStackTrace();
